@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-const API_BASE = 'https://farmersetu-production.up.railway.app/api';
+const API_BASE = '/api/backend';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
