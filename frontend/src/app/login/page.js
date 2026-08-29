@@ -12,27 +12,14 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
-    setMessage('');
-    setError('');
-    const form = new FormData(event.currentTarget);
-    setLoading(true);
+    event.preventDefault(); setMessage(''); setError('');
+    const form = new FormData(event.currentTarget); setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: String(form.get('identifier')).trim(), password: String(form.get('password')) }),
-      });
+      const response = await fetch(`${API_BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: String(form.get('identifier')).trim(), password: String(form.get('password')) }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || 'Invalid login details.');
-      localStorage.setItem('farmersetu_access_token', data.access_token);
-      localStorage.setItem('farmersetu_user', JSON.stringify(data.user));
-      window.location.href = '/farmer/dashboard';
-    } catch (err) {
-      setError(err.message || 'Unable to connect to the server.');
-    } finally {
-      setLoading(false);
-    }
+      localStorage.setItem('farmersetu_access_token', data.access_token); localStorage.setItem('farmersetu_user', JSON.stringify(data.user)); window.location.href = '/farmer/dashboard';
+    } catch (err) { setError(err.message || 'Unable to connect to the server.'); } finally { setLoading(false); }
   };
 
   return (
@@ -45,8 +32,7 @@ export default function LoginPage() {
       <section className="auth-panel auth-form-panel"><div className="auth-form-wrap login-form-wrap">
         <Link href="/" className="back-home">← Back to FarmerSetu</Link>
         <div className="auth-heading"><span className="auth-kicker">FARMER LOGIN</span><h2>Sign in to your account</h2><p>Enter your registered mobile number or email address and password.</p></div>
-        {error && <div className="form-error" role="alert">{error}</div>}
-        {message && <div className="form-info" role="status">{message}</div>}
+        {error && <div className="form-error" role="alert">{error}</div>}{message && <div className="form-info" role="status">{message}</div>}
         <form className="auth-form" onSubmit={handleSubmit}>
           <label><span>Mobile Number or Email</span><input name="identifier" type="text" placeholder="Enter mobile number or email" autoComplete="username" required /></label>
           <label><span>Password</span><div className="password-wrap"><input name="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" autoComplete="current-password" required /><button type="button" className="password-toggle" onClick={() => setShowPassword((value) => !value)}>{showPassword ? 'Hide' : 'Show'}</button></div></label>
@@ -55,6 +41,13 @@ export default function LoginPage() {
           <p className="auth-switch">New to FarmerSetu? <Link href="/register">Register as a Farmer</Link></p>
         </form>
       </div></section>
+      <style jsx global>{`
+        .login-page .auth-brand-panel{background-image:linear-gradient(110deg,rgba(3,42,24,.80),rgba(6,91,48,.50)),url('/images/guru-moorthy-gokul--tdqorDOxgc-unsplash.jpg');background-size:cover;background-position:center;color:#fff;}
+        .login-page .auth-logo{width:220px;height:125px;background:transparent;box-shadow:none;overflow:visible;display:block;position:relative;z-index:3;}
+        .login-page .auth-logo img{width:100%;height:100%;object-fit:contain;object-position:left center;filter:none!important;mix-blend-mode:normal;display:block;}
+        @media(max-width:900px){.login-page.auth-page{display:block;background:#f4f8f4}.login-page .auth-brand-panel{display:flex;min-height:430px;height:auto;padding:26px 28px 30px;background-position:center}.login-page .auth-logo{width:205px;height:112px}.login-page .auth-brand-copy{margin:18px 0 0}.login-page .auth-brand-copy h1{font-size:38px;margin:12px 0}.login-page .auth-points{display:grid}.login-page .auth-form-panel{min-height:auto;padding:35px 22px 45px}}
+        @media(max-width:600px){.login-page .auth-brand-panel{min-height:360px;padding:20px;background-position:center}.login-page .auth-logo{width:175px;height:95px}.login-page .auth-brand-copy h1{font-size:30px;letter-spacing:-1px}.login-page .auth-brand-copy p{font-size:12px;line-height:1.6}.login-page .auth-points{gap:7px;margin-top:16px;font-size:11px}.login-page .auth-brand-footer{display:none}.login-page .auth-heading h2{font-size:29px}}
+      `}</style>
     </main>
   );
 }
