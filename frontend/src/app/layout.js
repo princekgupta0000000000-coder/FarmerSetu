@@ -1,4 +1,5 @@
 import './globals.css';
+import BookingSuccessSound from '../components/BookingSuccessSound';
 
 export const metadata = {
   title: 'कृषि सेतु | FarmerSetu',
@@ -8,7 +9,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <BookingSuccessSound />
+        {children}
+      </body>
     </html>
   );
 }
