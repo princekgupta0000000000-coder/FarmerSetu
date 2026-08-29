@@ -1,1 +1,14 @@
-// FarmerSetu frontend root layout. Implementation will be added in Phase 1.
+import './globals.css';
+
+export const metadata = {
+  title: 'कृषि सेतु | FarmerSetu',
+  description: 'Smart Bridge Between Farmers & Markets',
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
