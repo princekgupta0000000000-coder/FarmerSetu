@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Production API. Keep this explicit so the deployed app never falls back to localhost.
+const API_BASE = 'https://farmer-setu-backend-qkm8cq802-nexus-7738.vercel.app';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -17,9 +18,9 @@ export default function LoginPage() {
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: String(form.get('identifier')).trim(), password: String(form.get('password')) }) });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || 'Invalid login details.');
+      if (!response.ok) throw new Error(data.detail || `Invalid login details (${response.status}).`);
       localStorage.setItem('farmersetu_access_token', data.access_token); localStorage.setItem('farmersetu_user', JSON.stringify(data.user)); window.location.href = '/farmer/dashboard';
-    } catch (err) { setError(err.message || 'Unable to connect to the server.'); } finally { setLoading(false); }
+    } catch (err) { setError(err instanceof TypeError ? 'Unable to reach FarmerSetu server. Please try again.' : (err.message || 'Unable to connect to the server.')); } finally { setLoading(false); }
   };
 
   return (
