@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 const stats = [
@@ -17,8 +17,72 @@ const menuItems = [
   ['🛒', 'Procurement Status', '/farmer/procurement'], ['▣', 'Payments', '/farmer/payments'], ['♧', 'Notifications', '/farmer/notifications'], ['◉', 'Help & Support', '#support'],
 ];
 
+function weatherLabel(code) {
+  if (code === 0) return 'Clear';
+  if ([1, 2, 3].includes(code)) return 'Cloudy';
+  if ([45, 48].includes(code)) return 'Foggy';
+  if ([51, 53, 55, 56, 57].includes(code)) return 'Drizzle';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'Rain';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snow';
+  if ([95, 96, 99].includes(code)) return 'Storm';
+  return 'Weather';
+}
+
 export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [location, setLocation] = useState('Detecting location…');
+  const [temperature, setTemperature] = useState('—°C');
+  const [weatherText, setWeatherText] = useState('');
+  const [locationError, setLocationError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadWeather = async (latitude, longitude) => {
+      try {
+        const [placeRes, weatherRes] = await Promise.all([
+          fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`),
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`),
+        ]);
+        const place = await placeRes.json();
+        const weather = await weatherRes.json();
+        if (cancelled) return;
+
+        const city = place.city || place.locality || place.principalSubdivision || 'Your Location';
+        const state = place.principalSubdivision && city !== place.principalSubdivision ? place.principalSubdivision : '';
+        setLocation(state ? `${city}, ${state}` : city);
+        setTemperature(`${Math.round(weather.current?.temperature_2m ?? 0)}°C`);
+        setWeatherText(weatherLabel(weather.current?.weather_code));
+      } catch {
+        if (!cancelled) {
+          setLocation('Location unavailable');
+          setTemperature('—°C');
+          setWeatherText('Weather unavailable');
+        }
+      }
+    };
+
+    if (!navigator.geolocation) {
+      setLocationError(true);
+      setLocation('Location not supported');
+      return () => { cancelled = true; };
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => loadWeather(coords.latitude, coords.longitude),
+      () => {
+        if (!cancelled) {
+          setLocationError(true);
+          setLocation('Allow location access');
+          setTemperature('—°C');
+          setWeatherText('Enable location');
+        }
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
+
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <main className="site-shell">
@@ -39,9 +103,9 @@ export default function HomePage() {
       <section className="content-area">
         <header className="topbar">
           <button className="menu-button" aria-label="Open menu" onClick={() => setMenuOpen(true)}>☰</button>
-          <div className="location"><span className="location-pin">⌖</span><strong>Motihari, Bihar</strong><span>⌄</span></div>
+          <div className="location" title={location}><span className="location-pin">⌖</span><strong>{location}</strong><span>⌄</span></div>
           <div className="top-actions">
-            <span className="weather">☀ <strong>28°C</strong></span>
+            <span className="weather" title={weatherText}><span aria-hidden="true">☀</span> <strong>{temperature}</strong></span>
             <span className="language">◎ <strong>English</strong>⌄</span>
             <Link className="top-login" href="/login">♙ &nbsp; Login</Link>
           </div>
@@ -78,7 +142,7 @@ export default function HomePage() {
             <div className="queue-content">
               <div className="centre-info">
                 <div className="centre-photo"><img src="/images/rajesh-ram-HOOKgN_zIY8-unsplash.jpg" alt="Agricultural procurement area" /></div>
-                <div><h3>Motihari Procurement Centre</h3><p>◷ &nbsp; Estimated Waiting Time</p><strong className="wait-time">42 mins</strong><div className="progress"><span /></div><small>⟳ &nbsp; Updated just now</small></div>
+                <div><h3>{locationError ? 'Procurement Centre' : `${location.split(',')[0]} Procurement Centre`}</h3><p>◷ &nbsp; Estimated Waiting Time</p><strong className="wait-time">42 mins</strong><div className="progress"><span /></div><small>⟳ &nbsp; Updated just now</small></div>
               </div>
               <div className="queue-stat"><span>Farmers in Queue</span><strong>18</strong></div>
               <div className="queue-stat"><span>Currently Processing</span><strong>5</strong></div>
