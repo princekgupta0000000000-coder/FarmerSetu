@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-// Production API. Keep this explicit so the deployed app never falls back to localhost.
-const API_BASE = 'https://farmer-setu-backend-qkm8cq802-nexus-7738.vercel.app';
+// Same-origin proxy avoids browser-to-backend CORS/network issues on Vercel.
+const API_BASE = '/api/backend';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -16,7 +16,7 @@ export default function LoginPage() {
     event.preventDefault(); setMessage(''); setError('');
     const form = new FormData(event.currentTarget); setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: String(form.get('identifier')).trim(), password: String(form.get('password')) }) });
+      const response = await fetch(`${API_BASE}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifier: String(form.get('identifier') || '').trim(), password: String(form.get('password') || '') }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || `Invalid login details (${response.status}).`);
       localStorage.setItem('farmersetu_access_token', data.access_token); localStorage.setItem('farmersetu_user', JSON.stringify(data.user)); window.location.href = '/farmer/dashboard';
