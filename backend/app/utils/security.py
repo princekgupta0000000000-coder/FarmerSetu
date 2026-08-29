@@ -5,7 +5,10 @@ from passlib.context import CryptContext
 
 from app.config.settings import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use PBKDF2 instead of bcrypt here because the serverless deployment may
+# resolve a bcrypt/passlib version combination that is incompatible at runtime.
+# PBKDF2-SHA256 is supported by Passlib and works reliably in Vercel Python functions.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
