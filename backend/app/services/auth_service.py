@@ -32,10 +32,39 @@ def register_farmer(db: Session, data: RegisterRequest) -> User:
     return user
 
 
+def ensure_demo_employee(db: Session) -> User:
+    """Ensure the demo procurement employee exists in the database."""
+    mobile = "9999999999"
+    email = "employee@farmersetu.demo"
+    user = db.scalar(select(User).where(or_(User.mobile == mobile, User.email == email)))
+    if user is None:
+        user = User(
+            full_name="FarmerSetu Procurement Employee",
+            mobile=mobile,
+            email=email,
+            password_hash=hash_password("Employee@123"),
+            state="Uttar Pradesh",
+            district="Lucknow",
+            role="employee",
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+
+
 def login_farmer(db: Session, data: LoginRequest) -> tuple[User, str]:
     identifier = data.identifier.strip()
-    query = select(User).where(or_(User.mobile == identifier, User.email == identifier.lower()))
-    user = db.scalar(query)
+
+    # The demo employee is also ensured on the login path so it works even
+    # when the service database was recreated after deployment.
+    if identifier in {"9999999999", "employee@farmersetu.demo"} and data.password == "Employee@123":
+        user = ensure_demo_employee(db)
+    else:
+        query = select(User).where(or_(User.mobile == identifier, User.email == identifier.lower()))
+        user = db.scalar(query)
+
     if not user or not verify_password(data.password, user.password_hash):
         raise AuthError("Invalid mobile/email or password")
     if not user.is_active:
