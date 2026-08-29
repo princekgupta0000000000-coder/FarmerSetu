@@ -3,75 +3,58 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    setMessage('Login details received. Secure server authentication will be connected with the backend.');
+    setMessage('');
+    setError('');
+    const form = new FormData(event.currentTarget);
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: String(form.get('identifier')).trim(), password: String(form.get('password')) }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || 'Invalid login details.');
+      localStorage.setItem('farmersetu_access_token', data.access_token);
+      localStorage.setItem('farmersetu_user', JSON.stringify(data.user));
+      window.location.href = '/farmer/dashboard';
+    } catch (err) {
+      setError(err.message || 'Unable to connect to the server.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <main className="auth-page login-page">
       <section className="auth-panel auth-brand-panel">
-        <Link href="/" className="auth-logo" aria-label="FarmerSetu home">
-          <img src="/images/IMG_20260829_104252_707.jpg" alt="FarmerSetu logo" />
-        </Link>
-        <div className="auth-brand-copy">
-          <span className="auth-brand-tag">FARMERSETU • SMART PROCUREMENT</span>
-          <h1>Welcome back, <strong>Farmer.</strong></h1>
-          <p>Manage your procurement slots, token number, live queue and payment status from one simple dashboard.</p>
-          <div className="auth-points">
-            <div><b>✓</b><span>View all your bookings in one place</span></div>
-            <div><b>✓</b><span>Get live procurement updates</span></div>
-            <div><b>✓</b><span>Track your token and queue status</span></div>
-          </div>
-        </div>
+        <Link href="/" className="auth-logo" aria-label="FarmerSetu home"><img src="/images/IMG_20260829_104252_707.jpg" alt="FarmerSetu logo" /></Link>
+        <div className="auth-brand-copy"><span className="auth-brand-tag">FARMERSETU • SMART PROCUREMENT</span><h1>Welcome back, <strong>Farmer.</strong></h1><p>Manage your procurement slots, token number, live queue and payment status from one simple dashboard.</p><div className="auth-points"><div><b>✓</b><span>View all your bookings in one place</span></div><div><b>✓</b><span>Get live procurement updates</span></div><div><b>✓</b><span>Track your token and queue status</span></div></div></div>
         <div className="auth-brand-footer">Smart Bridge Between Farmers &amp; Markets.</div>
       </section>
-
-      <section className="auth-panel auth-form-panel">
-        <div className="auth-form-wrap login-form-wrap">
-          <Link href="/" className="back-home">← Back to FarmerSetu</Link>
-          <div className="auth-heading">
-            <span className="auth-kicker">FARMER LOGIN</span>
-            <h2>Sign in to your account</h2>
-            <p>Enter your registered mobile number or email address and password.</p>
-          </div>
-          {message && <div className="form-info" role="status">{message}</div>}
-          <form className="auth-form" onSubmit={handleSubmit}>
-            <label><span>Mobile Number or Email</span><input name="identifier" type="text" placeholder="Enter mobile number or email" autoComplete="username" required /></label>
-            <label><span>Password</span><div className="password-wrap"><input name="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" autoComplete="current-password" required /><button type="button" className="password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? 'Hide' : 'Show'}</button></div></label>
-            <div className="login-options"><label className="check-row"><input type="checkbox" name="remember" /><span>Remember me</span></label><button type="button" className="forgot-btn" onClick={() => setMessage('Password recovery will be enabled with the authentication backend.')}>Forgot password?</button></div>
-            <button className="auth-primary auth-submit" type="submit">Sign In to FarmerSetu <span>→</span></button>
-            <p className="auth-switch">New to FarmerSetu? <Link href="/register">Register as a Farmer</Link></p>
-          </form>
-        </div>
-      </section>
-
-      <style jsx global>{`
-        .login-page .auth-brand-panel{background-image:linear-gradient(105deg,rgba(3,42,24,.80) 0%,rgba(6,91,48,.58) 50%,rgba(8,122,62,.24) 100%),url('/images/guru-moorthy-gokul--tdqorDOxgc-unsplash.jpg');background-size:cover;background-position:center;}
-        .login-page .auth-logo{width:250px;height:145px;padding:0;background:transparent;box-shadow:none;overflow:hidden;display:block;position:relative;z-index:3;}
-        .login-page .auth-logo img{width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;object-position:left center;filter:none!important;mix-blend-mode:normal;display:block;}
-        .login-page .auth-brand-copy{max-width:590px;margin:auto 0;}
-        .login-page .auth-brand-copy h1{font-size:clamp(40px,4.4vw,66px);line-height:1.08;margin:17px 0 20px;letter-spacing:-2px;}
-        .login-page .auth-brand-copy h1 strong{color:#b9e98d;}
-        .login-page .auth-brand-copy p{font-size:15px;line-height:1.85;max-width:540px;}
-        .login-page .auth-points{display:grid;gap:13px;margin-top:30px;}
-        .login-page .auth-points div{display:flex;align-items:center;gap:13px;font-size:13px;}
-        .login-page .auth-points b{width:31px;height:31px;border-radius:50%;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);display:grid;place-items:center;}
-        .login-page .auth-brand-footer{font-size:11px;letter-spacing:1.2px;opacity:.72;position:relative;z-index:2;}
-        .login-page .auth-form-panel{background:linear-gradient(135deg,#fff 0%,#fbfdfb 100%);}
-        .login-page .auth-form-wrap{width:min(520px,100%);}
-        .login-page .auth-heading{margin-bottom:30px;}
-        .login-page .auth-heading h2{font-size:38px;margin:8px 0 8px;letter-spacing:-1.5px;}
-        .login-page .auth-form{gap:17px;}
-        .login-page .auth-primary{min-height:54px;font-size:14px;}
-        .login-page .auth-submit{margin-top:6px;}
-        @media(max-width:900px){.login-page .auth-brand-panel{min-height:370px;background-position:center 38%;}.login-page .auth-logo{width:220px;height:125px;}.login-page .auth-brand-copy h1{font-size:40px;}.login-page .auth-brand-footer{display:none;}}
-        @media(max-width:680px){.login-page .auth-brand-panel{min-height:315px;padding:18px 22px;}.login-page .auth-logo{width:175px;height:100px;}.login-page .auth-brand-copy h1{font-size:31px;margin:8px 0 10px;}.login-page .auth-brand-copy p{font-size:12.5px;line-height:1.65;}.login-page .auth-points{display:none;}.login-page .auth-heading h2{font-size:30px;}}
-      `}</style>
+      <section className="auth-panel auth-form-panel"><div className="auth-form-wrap login-form-wrap">
+        <Link href="/" className="back-home">← Back to FarmerSetu</Link>
+        <div className="auth-heading"><span className="auth-kicker">FARMER LOGIN</span><h2>Sign in to your account</h2><p>Enter your registered mobile number or email address and password.</p></div>
+        {error && <div className="form-error" role="alert">{error}</div>}
+        {message && <div className="form-info" role="status">{message}</div>}
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label><span>Mobile Number or Email</span><input name="identifier" type="text" placeholder="Enter mobile number or email" autoComplete="username" required /></label>
+          <label><span>Password</span><div className="password-wrap"><input name="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" autoComplete="current-password" required /><button type="button" className="password-toggle" onClick={() => setShowPassword((value) => !value)}>{showPassword ? 'Hide' : 'Show'}</button></div></label>
+          <div className="login-options"><label className="check-row"><input type="checkbox" name="remember" /><span>Remember me</span></label><button type="button" className="forgot-btn" onClick={() => setMessage('Password recovery will be enabled in a future update.')}>Forgot password?</button></div>
+          <button className="auth-primary auth-submit" type="submit" disabled={loading}>{loading ? 'Signing In...' : 'Sign In to FarmerSetu'} {!loading && <span>→</span>}</button>
+          <p className="auth-switch">New to FarmerSetu? <Link href="/register">Register as a Farmer</Link></p>
+        </form>
+      </div></section>
     </main>
   );
 }
