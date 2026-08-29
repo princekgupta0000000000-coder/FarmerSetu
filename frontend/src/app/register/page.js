@@ -31,7 +31,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="auth-page">
+    <main className="auth-page register-page">
       <div className="auth-panel auth-brand-panel">
         <Link href="/" className="auth-logo"><img src="/images/IMG_20260829_104252_707.jpg" alt="कृषि सेतु logo" /></Link>
         <div className="auth-brand-copy">
@@ -72,6 +72,13 @@ export default function RegisterPage() {
           )}
         </div>
       </div>
+
+      <style jsx global>{`
+        .register-page .auth-brand-panel{background-image:linear-gradient(90deg,rgba(4,55,29,.82),rgba(8,122,62,.52)),url('/images/mus-lihat-ZOKLwSOyeUQ-unsplash.jpg');background-size:cover;background-position:center;}
+        .register-page .auth-logo,.login-page .auth-logo{width:140px;height:88px;padding:8px 12px;border-radius:14px;background:rgba(255,255,255,.96);box-shadow:0 8px 24px rgba(0,0,0,.16);}
+        .register-page .auth-logo img,.login-page .auth-logo img{filter:none!important;object-fit:contain;}
+        @media(max-width:900px){.register-page .auth-brand-panel{background-position:center 42%;}}
+      `}</style>
     </main>
   );
 }
