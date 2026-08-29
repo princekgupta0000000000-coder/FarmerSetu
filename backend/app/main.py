@@ -1,11 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config.database import Base, engine
-from app.models.user import User  # noqa: F401
 from app.routes.auth import router as auth_router
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="FarmerSetu API", version="1.0.0")
 
