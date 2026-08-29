@@ -6,6 +6,8 @@ pydantic
 pydantic-settings
 python-jose
 passlib
+bcrypt
 qrcode
 pillow
 python-multipart
+email-validator
