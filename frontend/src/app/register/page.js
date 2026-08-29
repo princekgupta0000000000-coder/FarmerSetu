@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-// Same-origin proxy avoids browser-to-backend CORS/network issues on Vercel.
-const API_BASE = '/api/backend';
+// Production FastAPI backend. Direct browser calls are allowed by the backend CORS policy.
+const API_BASE = 'https://farmer-setu-backend-qkm8cq802-nexus-7738.vercel.app/api';
 
 export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -25,6 +25,7 @@ export default function RegisterPage() {
     try {
       const response = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
+        mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           full_name: String(form.get('fullName') || '').trim(),
