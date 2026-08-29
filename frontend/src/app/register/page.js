@@ -51,7 +51,7 @@ export default function RegisterPage() {
         </form>}
       </div></section>
       <style jsx global>{`
-        .register-page .auth-brand-panel{background-image:linear-gradient(110deg,rgba(3,52,29,.78),rgba(5,104,52,.45)),url('/images/mus-lihat-ZOKLwSOyeUQ-unsplash.jpg');background-size:cover;background-position:center;color:#fff;}
+        .register-page .auth-brand-panel{background-image:linear-gradient(110deg,rgba(3,52,29,.78),rgba(5,104,52,.45)),url('/images/guru-moorthy-gokul--tdqorDOxgc-unsplash.jpg');background-size:cover;background-position:center;color:#fff;}
         .register-page .auth-logo{width:220px;height:125px;background:transparent;box-shadow:none;overflow:visible;display:block;position:relative;z-index:3;}
         .register-page .auth-logo img{width:100%;height:100%;object-fit:contain;object-position:left center;filter:none!important;mix-blend-mode:normal;display:block;}
         @media(max-width:900px){.register-page.auth-page{display:block;background:#f4f8f4}.register-page .auth-brand-panel{display:flex;min-height:430px;height:auto;padding:26px 28px 30px;background-position:center}.register-page .auth-logo{width:205px;height:112px}.register-page .auth-brand-copy{margin:18px 0 0}.register-page .auth-brand-copy h1{font-size:38px;margin:12px 0}.register-page .auth-points{display:grid}.register-page .auth-form-panel{min-height:auto;padding:35px 22px 45px}}
