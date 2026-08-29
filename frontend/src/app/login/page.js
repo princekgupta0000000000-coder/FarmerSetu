@@ -38,6 +38,13 @@ export default function LoginPage() {
           </form>
         </div>
       </div>
+
+      <style jsx global>{`
+        .login-page .auth-brand-panel{background-image:linear-gradient(90deg,rgba(4,55,29,.78),rgba(8,122,62,.46)),url('/images/guru-moorthy-gokul--tdqorDOxgc-unsplash.jpg');background-size:cover;background-position:center;}
+        .login-page .auth-logo{width:140px;height:88px;padding:8px 12px;border-radius:14px;background:rgba(255,255,255,.96);box-shadow:0 8px 24px rgba(0,0,0,.16);}
+        .login-page .auth-logo img{filter:none!important;object-fit:contain;}
+        @media(max-width:900px){.login-page .auth-brand-panel{background-position:center 38%;}}
+      `}</style>
     </main>
   );
 }
