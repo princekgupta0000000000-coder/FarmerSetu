@@ -51,16 +51,9 @@ export default function LoginPage() {
       </section>
 
       <style jsx global>{`
-        .login-page .auth-brand-panel{
-          background-image:linear-gradient(105deg,rgba(3,42,24,.80) 0%,rgba(6,91,48,.58) 50%,rgba(8,122,62,.24) 100%),url('/images/guru-moorthy-gokul--tdqorDOxgc-unsplash.jpg');
-          background-size:cover;background-position:center;
-        }
-        .login-page .auth-logo{
-          width:250px;height:145px;padding:0;background:transparent;box-shadow:none;overflow:visible;display:flex;align-items:center;justify-content:flex-start;position:relative;z-index:3;
-        }
-        .login-page .auth-logo img{
-          width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;object-position:left center;filter:none!important;mix-blend-mode:multiply;display:block;
-        }
+        .login-page .auth-brand-panel{background-image:linear-gradient(105deg,rgba(3,42,24,.80) 0%,rgba(6,91,48,.58) 50%,rgba(8,122,62,.24) 100%),url('/images/guru-moorthy-gokul--tdqorDOxgc-unsplash.jpg');background-size:cover;background-position:center;}
+        .login-page .auth-logo{width:250px;height:145px;padding:0;background:transparent;box-shadow:none;overflow:hidden;display:block;position:relative;z-index:3;}
+        .login-page .auth-logo img{width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;object-position:left center;filter:none!important;mix-blend-mode:normal;display:block;}
         .login-page .auth-brand-copy{max-width:590px;margin:auto 0;}
         .login-page .auth-brand-copy h1{font-size:clamp(40px,4.4vw,66px);line-height:1.08;margin:17px 0 20px;letter-spacing:-2px;}
         .login-page .auth-brand-copy h1 strong{color:#b9e98d;}
@@ -76,20 +69,8 @@ export default function LoginPage() {
         .login-page .auth-form{gap:17px;}
         .login-page .auth-primary{min-height:54px;font-size:14px;}
         .login-page .auth-submit{margin-top:6px;}
-        @media(max-width:900px){
-          .login-page .auth-brand-panel{min-height:370px;background-position:center 38%;}
-          .login-page .auth-logo{width:220px;height:125px;}
-          .login-page .auth-brand-copy h1{font-size:40px;}
-          .login-page .auth-brand-footer{display:none;}
-        }
-        @media(max-width:680px){
-          .login-page .auth-brand-panel{min-height:315px;padding:18px 22px;}
-          .login-page .auth-logo{width:175px;height:100px;}
-          .login-page .auth-brand-copy h1{font-size:31px;margin:8px 0 10px;}
-          .login-page .auth-brand-copy p{font-size:12.5px;line-height:1.65;}
-          .login-page .auth-points{display:none;}
-          .login-page .auth-heading h2{font-size:30px;}
-        }
+        @media(max-width:900px){.login-page .auth-brand-panel{min-height:370px;background-position:center 38%;}.login-page .auth-logo{width:220px;height:125px;}.login-page .auth-brand-copy h1{font-size:40px;}.login-page .auth-brand-footer{display:none;}}
+        @media(max-width:680px){.login-page .auth-brand-panel{min-height:315px;padding:18px 22px;}.login-page .auth-logo{width:175px;height:100px;}.login-page .auth-brand-copy h1{font-size:31px;margin:8px 0 10px;}.login-page .auth-brand-copy p{font-size:12.5px;line-height:1.65;}.login-page .auth-points{display:none;}.login-page .auth-heading h2{font-size:30px;}}
       `}</style>
     </main>
   );
