@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-// Production FastAPI backend. Direct browser calls are allowed by the backend CORS policy.
-const API_BASE = 'https://farmer-setu-backend-qkm8cq802-nexus-7738.vercel.app/api';
+const API_BASE = '/api/backend';
 
 export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -25,7 +24,6 @@ export default function RegisterPage() {
     try {
       const response = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
-        mode: 'cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           full_name: String(form.get('fullName') || '').trim(),
@@ -37,10 +35,10 @@ export default function RegisterPage() {
         }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || `Registration failed (${response.status}).`);
+      if (!response.ok) throw new Error(data.detail || data.error || `Registration failed (${response.status}).`);
       setSubmitted(true);
     } catch (err) {
-      setError(err instanceof TypeError ? 'Unable to reach FarmerSetu server. Please try again.' : (err.message || 'Unable to connect to the server.'));
+      setError(err.message || 'Unable to connect to FarmerSetu server.');
     } finally {
       setLoading(false);
     }
