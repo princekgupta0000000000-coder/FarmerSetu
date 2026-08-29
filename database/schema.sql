@@ -1,0 +1,1 @@
+-- FarmerSetu database schema will be implemented in the database phase.

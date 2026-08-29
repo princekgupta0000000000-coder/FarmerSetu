@@ -1,0 +1,1 @@
+// Shared modal component.

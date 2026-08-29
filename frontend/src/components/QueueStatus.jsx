@@ -1,0 +1,1 @@
+// Live queue status component.

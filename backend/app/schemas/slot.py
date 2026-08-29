@@ -1,0 +1,1 @@
+# Slot request/response schemas.
