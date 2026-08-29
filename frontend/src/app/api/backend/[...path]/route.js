@@ -17,7 +17,7 @@ async function proxy(request, { params }) {
       redirect: 'manual',
     };
 
-    if (!['GET', 'HEAD'].includes(request.method)) {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
       init.body = await request.arrayBuffer();
     }
 
@@ -44,4 +44,17 @@ export const POST = proxy;
 export const PUT = proxy;
 export const PATCH = proxy;
 export const DELETE = proxy;
-export const OPTIONS = proxy;
+
+// Handle browser preflight at the same-origin frontend instead of forwarding
+// OPTIONS to Railway. This prevents the SMS request from failing at preflight.
+export async function OPTIONS(request) {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': request.headers.get('origin') || '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': request.headers.get('access-control-request-headers') || 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
