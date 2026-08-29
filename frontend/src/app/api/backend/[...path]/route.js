@@ -1,9 +1,8 @@
-const BACKEND_URL = 'https://farmer-setu-backend-qkm8cq802-nexus-7738.vercel.app';
+const BACKEND_URL = 'https://farmersetu-production.up.railway.app';
 
 async function proxy(request, { params }) {
   const resolvedParams = await params;
   const path = Array.isArray(resolvedParams?.path) ? resolvedParams.path.join('/') : '';
-  // Frontend calls /api/backend/auth/register; FastAPI exposes /api/auth/register.
   const target = `${BACKEND_URL}/api/${path}${request.nextUrl.search}`;
 
   try {
