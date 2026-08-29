@@ -11,16 +11,14 @@ from app.routes.notifications import router as notifications_router
 app = FastAPI(title="FarmerSetu API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    # Allow the deployed FarmerSetu frontend (including custom domains)
-    # to call this API. Keep credentials enabled for authenticated requests.
     allow_origins=[
         "https://farmer-setu.vercel.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
-    allow_origin_regex=r"https://.*$",
+    allow_origin_regex=r"https?://.*$",
     allow_credentials=True,
-    allow_methods=["*"] ,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 app.include_router(auth_router)
