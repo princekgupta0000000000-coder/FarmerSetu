@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-// Production API. Keep this explicit so the deployed app never falls back to localhost.
-const API_BASE = 'https://farmer-setu-backend-qkm8cq802-nexus-7738.vercel.app';
+// Same-origin proxy avoids browser-to-backend CORS/network issues on Vercel.
+const API_BASE = '/api/backend';
 
 export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -23,16 +23,16 @@ export default function RegisterPage() {
     if (password !== confirmPassword) return setError('Passwords do not match.');
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/auth/register`, {
+      const response = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          full_name: String(form.get('fullName')).trim(),
+          full_name: String(form.get('fullName') || '').trim(),
           mobile,
           email: String(form.get('email') || '').trim() || null,
           password,
-          state: String(form.get('state')).trim(),
-          district: String(form.get('district')).trim(),
+          state: String(form.get('state') || '').trim(),
+          district: String(form.get('district') || '').trim(),
         }),
       });
       const data = await response.json().catch(() => ({}));
