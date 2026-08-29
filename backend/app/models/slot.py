@@ -1,0 +1,1 @@
+# Procurement slot database model.
