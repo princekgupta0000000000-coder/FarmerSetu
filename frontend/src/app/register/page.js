@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Production API. Keep this explicit so the deployed app never falls back to localhost.
+const API_BASE = 'https://farmer-setu-backend-qkm8cq802-nexus-7738.vercel.app';
 
 export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -22,11 +23,26 @@ export default function RegisterPage() {
     if (password !== confirmPassword) return setError('Passwords do not match.');
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ full_name: String(form.get('fullName')).trim(), mobile, email: String(form.get('email') || '').trim() || null, password, state: String(form.get('state')).trim(), district: String(form.get('district')).trim() }) });
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: String(form.get('fullName')).trim(),
+          mobile,
+          email: String(form.get('email') || '').trim() || null,
+          password,
+          state: String(form.get('state')).trim(),
+          district: String(form.get('district')).trim(),
+        }),
+      });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || 'Registration failed. Please try again.');
+      if (!response.ok) throw new Error(data.detail || `Registration failed (${response.status}).`);
       setSubmitted(true);
-    } catch (err) { setError(err.message || 'Unable to connect to the server.'); } finally { setLoading(false); }
+    } catch (err) {
+      setError(err instanceof TypeError ? 'Unable to reach FarmerSetu server. Please try again.' : (err.message || 'Unable to connect to the server.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
