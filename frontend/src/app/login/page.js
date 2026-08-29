@@ -42,7 +42,7 @@ export default function LoginPage() {
         </form>
       </div></section>
       <style jsx global>{`
-        .login-page .auth-brand-panel{background-image:linear-gradient(110deg,rgba(3,42,24,.80),rgba(6,91,48,.50)),url('/images/guru-moorthy-gokul--tdqorDOxgc-unsplash.jpg');background-size:cover;background-position:center;color:#fff;}
+        .login-page .auth-brand-panel{background-image:linear-gradient(110deg,rgba(3,42,24,.80),rgba(6,91,48,.50)),url('/images/mus-lihat-ZOKLwSOyeUQ-unsplash.jpg');background-size:cover;background-position:center;color:#fff;}
         .login-page .auth-logo{width:220px;height:125px;background:transparent;box-shadow:none;overflow:visible;display:block;position:relative;z-index:3;}
         .login-page .auth-logo img{width:100%;height:100%;object-fit:contain;object-position:left center;filter:none!important;mix-blend-mode:normal;display:block;}
         @media(max-width:900px){.login-page.auth-page{display:block;background:#f4f8f4}.login-page .auth-brand-panel{display:flex;min-height:430px;height:auto;padding:26px 28px 30px;background-position:center}.login-page .auth-logo{width:205px;height:112px}.login-page .auth-brand-copy{margin:18px 0 0}.login-page .auth-brand-copy h1{font-size:38px;margin:12px 0}.login-page .auth-points{display:grid}.login-page .auth-form-panel{min-height:auto;padding:35px 22px 45px}}
