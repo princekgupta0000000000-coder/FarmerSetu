@@ -1,6 +1,9 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+
+export const dynamic = 'force-dynamic';
+
 const API='/api/backend';
 export default function VerifyBookingPage(){
  const[booking,setBooking]=useState(null),[loading,setLoading]=useState(true),[employee,setEmployee]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[received,setReceived]=useState(''),[qualityNote,setQualityNote]=useState(''),[paymentRef,setPaymentRef]=useState('');
