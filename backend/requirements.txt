@@ -11,3 +11,4 @@ qrcode
 pillow
 python-multipart
 email-validator
+firebase-admin
