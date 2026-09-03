@@ -1,16 +1,26 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from firebase_admin import messaging
+from app.services.firebase_service import _init_firebase
 
-from app.services.exotel_service import send_sms
+router = APIRouter(prefix='/api/notifications', tags=['Notifications'])
 
-router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
+class PushNotification(BaseModel):
+    token: str
+    title: str
+    body: str
+    data: dict[str, str] = {}
 
-
-class SMSNotification(BaseModel):
-    phone: str
-    message: str
-
-
-@router.post("/sms")
-def sms_notification(payload: SMSNotification):
-    return send_sms(payload.phone, payload.message)
+@router.post('/push')
+def push_notification(payload: PushNotification):
+    try:
+        _init_firebase()
+        message = messaging.Message(
+            notification=messaging.Notification(title=payload.title, body=payload.body),
+            data=payload.data,
+            token=payload.token,
+        )
+        message_id = messaging.send(message)
+        return {'sent': True, 'message_id': message_id}
+    except Exception as exc:
+        raise HTTPException(502, f'Firebase notification failed: {str(exc)[:300]}') from exc
