@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from app.routes.auth import router as auth_router
 from app.routes.notifications import router as notifications_router
 from app.routes.employee import router as employee_router
+from app.routes.otp import router as otp_router
 from app.config.database import engine, SessionLocal, Base
 from app.models.user import User
 from app.models.booking import Booking  # noqa: F401
@@ -14,7 +15,6 @@ app=FastAPI(title='FarmerSetu API',version='1.0.0')
 
 @app.on_event('startup')
 def seed_demo_employee():
-    # Creates one safe demo procurement employee only if it does not exist.
     Base.metadata.create_all(bind=engine)
     db=SessionLocal()
     try:
@@ -24,10 +24,8 @@ def seed_demo_employee():
             db.add(User(full_name='FarmerSetu Procurement Employee',mobile=mobile,email='employee@farmersetu.demo',password_hash=hash_password('Employee@123'),state='Uttar Pradesh',district='Lucknow',role='employee',is_active=True))
             db.commit()
         elif user.role not in {'employee','procurement_employee','officer','admin'}:
-            # Never silently convert an existing farmer account into an employee.
             pass
-    finally:
-        db.close()
+    finally: db.close()
 
 @app.middleware('http')
 async def cors_middleware(request: Request, call_next):
@@ -46,14 +44,13 @@ async def cors_middleware(request: Request, call_next):
 app.include_router(auth_router)
 app.include_router(notifications_router)
 app.include_router(employee_router)
+app.include_router(otp_router)
 
 class WhatsAppNotification(BaseModel): phone:str; message:str
-
 @app.get('/')
 def root(): return {'message':'FarmerSetu API is running'}
 @app.get('/health')
 def health(): return {'status':'ok'}
-
 @app.post('/api/notifications/whatsapp')
 def whatsapp_notification(payload: WhatsAppNotification):
     token=os.getenv('WHATSAPP_ACCESS_TOKEN'); phone_id=os.getenv('WHATSAPP_PHONE_NUMBER_ID')
@@ -65,5 +62,5 @@ def whatsapp_notification(payload: WhatsAppNotification):
     try:
         with urllib.request.urlopen(req,timeout=12) as response: result=json.loads(response.read().decode())
         return {'sent':True,'configured':True,'result':result}
-    except urllib.error.HTTPError as exc: raise HTTPException(502, f'WhatsApp delivery failed: {exc.read().decode(errors="replace")[:500]}')
-    except Exception as exc: raise HTTPException(502, f'WhatsApp delivery failed: {str(exc)[:300]}')
+    except urllib.error.HTTPError as exc: raise HTTPException(502,f'WhatsApp delivery failed: {exc.read().decode(errors="replace")[:500]}')
+    except Exception as exc: raise HTTPException(502,f'WhatsApp delivery failed: {str(exc)[:300]}')
