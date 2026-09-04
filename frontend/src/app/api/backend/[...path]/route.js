@@ -55,12 +55,13 @@ async function proxy(request, { params }) {
   try {
     let response = await send(target, request.method, headers, body);
 
-    // Railway is currently running an older API build. Keep the browser API stable
-    // by transparently falling back to the older PATCH workflow when the newer
-    // transaction/payment/delete endpoints are not present there.
+    // Compatibility for older Railway builds that do not yet expose the newer
+    // transaction/payment/delete endpoints. All fallbacks use the existing PATCH
+    // booking workflow, so the browser remains functional during redeploys.
     if (response.status === 404 && request.method === 'POST') {
       const parts = path.split('/');
-      if (parts.length === 4 && parts[0] === 'employee' && parts[1] === 'bookings' && parts[3] === 'generate-transaction') {
+      const isEmployeeBookingAction = parts.length === 4 && parts[0] === 'employee' && parts[1] === 'bookings';
+      if (isEmployeeBookingAction && ['generate-transaction', 'generate-transact'].includes(parts[3])) {
         const bookingId = encodeURIComponent(parts[2]);
         response = await send(
           `${BACKEND_URL}/api/employee/bookings/${bookingId}`,
@@ -68,7 +69,7 @@ async function proxy(request, { params }) {
           new Headers({ ...Object.fromEntries(headers.entries()), 'Content-Type': 'application/json' }),
           new TextEncoder().encode(JSON.stringify({ quality_status: 'Passed' })),
         );
-      } else if (parts.length === 4 && parts[0] === 'employee' && parts[1] === 'bookings' && parts[3] === 'mark-paid') {
+      } else if (isEmployeeBookingAction && ['mark-paid', 'mark-payment', 'paid'].includes(parts[3])) {
         const bookingId = encodeURIComponent(parts[2]);
         const original = body ? new TextDecoder().decode(body) : '{}';
         let payload = {};
@@ -82,16 +83,8 @@ async function proxy(request, { params }) {
             ...(payload.payment_reference ? { payment_reference: payload.payment_reference } : {}),
           })),
         );
-      }
-    }
-
-    if (response.status === 404 && request.method === 'DELETE') {
-      const parts = path.split('/');
-      if (parts.length === 3 && parts[0] === 'employee' && parts[1] === 'bookings') {
+      } else if (isEmployeeBookingAction && parts[3] === 'delete') {
         const bookingId = encodeURIComponent(parts[2]);
-        // Soft-delete compatibility: old Railway builds already support PATCH and
-        // can mark a booking Cancelled. The queue hides cancelled records, so this
-        // behaves like Delete in the employee UI without requiring a Railway redeploy.
         response = await send(
           `${BACKEND_URL}/api/employee/bookings/${bookingId}`,
           'PATCH',
@@ -101,7 +94,20 @@ async function proxy(request, { params }) {
       }
     }
 
-    // Hide soft-deleted/cancelled bookings from the employee queue.
+    if (response.status === 404 && request.method === 'DELETE') {
+      const parts = path.split('/');
+      if (parts.length === 3 && parts[0] === 'employee' && parts[1] === 'bookings') {
+        const bookingId = encodeURIComponent(parts[2]);
+        response = await send(
+          `${BACKEND_URL}/api/employee/bookings/${bookingId}`,
+          'PATCH',
+          new Headers({ ...Object.fromEntries(headers.entries()), 'Content-Type': 'application/json' }),
+          new TextEncoder().encode(JSON.stringify({ status: 'Cancelled' })),
+        );
+      }
+    }
+
+    // Hide cancelled/soft-deleted bookings from the employee queue.
     if (response.ok && request.method === 'GET' && path === 'employee/bookings') {
       const text = await response.text();
       try {
