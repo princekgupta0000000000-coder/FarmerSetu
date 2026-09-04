@@ -176,17 +176,17 @@ def update_booking(booking_id: str, data: BookingUpdate, _: User = Depends(curre
     if target_quality == 'Passed' and b.status == 'Cancelled':
         raise HTTPException(400, 'Cancelled booking cannot pass quality')
 
-    # Transaction IDs are generated only on the server and remain immutable after generation.
+    # Always generate the transaction server-side when quality is passed.
     if target_quality == 'Passed' and not b.payment_reference:
         v['payment_reference'] = make_transaction_id()
 
     target_payment = v.get('payment_status', b.payment_status)
-    reference = (v.get('payment_reference') or b.payment_reference or '').strip()
     if target_payment == 'Paid':
         if target_quality != 'Passed':
             raise HTTPException(400, 'Quality must be passed before payment')
+        reference = (v.get('payment_reference') or b.payment_reference or '').strip()
         if not reference:
-            raise HTTPException(400, 'Transaction ID is missing')
+            reference = make_transaction_id()
         if b.payment_reference and reference != b.payment_reference:
             raise HTTPException(400, 'Transaction ID does not match the generated ID')
         v['payment_reference'] = reference
@@ -239,26 +239,62 @@ def generate_transaction(booking_id: str, _: User = Depends(current_employee), d
     b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
     if not b:
         raise HTTPException(404, 'Booking not found')
+    if b.status == 'Cancelled':
+        raise HTTPException(400, 'Cancelled booking cannot generate a transaction')
+    # This endpoint is idempotent. If quality has not been passed yet, but an actual
+    # received quantity exists, pass the quality record first so the employee button
+    # can never get stuck between the two API calls.
     if b.quality_status != 'Passed':
-        raise HTTPException(400, 'Pass quality before generating transaction ID')
+        if b.received_quantity is None:
+            raise HTTPException(400, 'Enter actual received quantity before generating transaction ID')
+        b.quality_status = 'Passed'
+        if b.status == 'Confirmed':
+            b.status = 'Processing'
     if not b.payment_reference:
         b.payment_reference = make_transaction_id()
-        db.commit()
-        db.refresh(b)
+        add_notification(db, b, 'Quality check passed ✓',
+                          f'{b.received_quantity:g} quintal received. Final amount: ₹{(float(b.received_quantity) * float(b.price)):,.0f}. Transaction ID: {b.payment_reference}.', 'quality')
+    db.commit()
+    db.refresh(b)
+    return serialize(b)
+
+
+@router.post('/bookings/{booking_id}/mark-paid')
+def mark_paid(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
+    b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
+    if not b:
+        raise HTTPException(404, 'Booking not found')
+    if b.status == 'Cancelled':
+        raise HTTPException(400, 'Cancelled booking cannot be paid')
+    if b.received_quantity is None:
+        raise HTTPException(400, 'Enter actual received quantity before payment')
+    if b.quality_status != 'Passed':
+        b.quality_status = 'Passed'
+    if not b.payment_reference:
+        b.payment_reference = make_transaction_id()
+    old_payment = b.payment_status
+    b.payment_status = 'Paid'
+    b.status = 'Completed'
+    b.estimated_amount = float(b.received_quantity) * float(b.price or 0)
+    if old_payment != 'Paid':
+        add_notification(db, b, 'Payment received ✓',
+                          f'₹{b.estimated_amount:,.0f} has been paid. Transaction ID: {b.payment_reference}.', 'payment')
+    db.commit()
+    db.refresh(b)
     return serialize(b)
 
 
 @router.delete('/bookings/{booking_id}')
-def employee_delete_booking(booking_id: str, user: User = Depends(current_employee), db: Session = Depends(get_db)):
-    b = db.scalar(select(Booking).where(Booking.booking_id == booking_id))
+def delete_booking(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
+    b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
     if not b:
         raise HTTPException(404, 'Booking not found')
     if b.payment_status == 'Paid':
-        raise HTTPException(400, 'Paid bookings cannot be deleted. Reverse the payment first.')
+        raise HTTPException(400, 'Paid booking cannot be deleted')
     db.execute(delete(Notification).where(Notification.booking_id == b.booking_id))
     db.delete(b)
     db.commit()
-    return {'ok': True, 'id': booking_id, 'message': 'Booking deleted successfully'}
+    return {'ok': True, 'booking_id': booking_id, 'message': 'Booking deleted successfully'}
 
 
 @router.patch('/bookings/{booking_id}/cancel')
