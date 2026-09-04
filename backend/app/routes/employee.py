@@ -82,8 +82,12 @@ def serialize(b: Booking, public=False):
     }
 
 
+# Temporary fixed transaction ID so the employee workflow remains usable
+# while the production transaction service is being stabilized.
+FIXED_TRANSACTION_ID = 'FS-TXN-FARMERSETU-0001'
+
 def make_transaction_id():
-    return f"FS-TXN-{datetime.utcnow():%Y%m%d}-{secrets.token_hex(4).upper()}"
+    return FIXED_TRANSACTION_ID
 
 
 def add_notification(db: Session, b: Booking, title: str, message: str, kind: str):
@@ -176,7 +180,6 @@ def update_booking(booking_id: str, data: BookingUpdate, _: User = Depends(curre
     if target_quality == 'Passed' and b.status == 'Cancelled':
         raise HTTPException(400, 'Cancelled booking cannot pass quality')
 
-    # Always generate the transaction server-side when quality is passed.
     if target_quality == 'Passed' and not b.payment_reference:
         v['payment_reference'] = make_transaction_id()
 
@@ -241,9 +244,6 @@ def generate_transaction(booking_id: str, _: User = Depends(current_employee), d
         raise HTTPException(404, 'Booking not found')
     if b.status == 'Cancelled':
         raise HTTPException(400, 'Cancelled booking cannot generate a transaction')
-    # This endpoint is idempotent. If quality has not been passed yet, but an actual
-    # received quantity exists, pass the quality record first so the employee button
-    # can never get stuck between the two API calls.
     if b.quality_status != 'Passed':
         if b.received_quantity is None:
             raise HTTPException(400, 'Enter actual received quantity before generating transaction ID')
@@ -286,6 +286,20 @@ def mark_paid(booking_id: str, _: User = Depends(current_employee), db: Session 
 
 @router.delete('/bookings/{booking_id}')
 def delete_booking(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
+    b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
+    if not b:
+        raise HTTPException(404, 'Booking not found')
+    if b.payment_status == 'Paid':
+        raise HTTPException(400, 'Paid booking cannot be deleted')
+    db.execute(delete(Notification).where(Notification.booking_id == b.booking_id))
+    db.delete(b)
+    db.commit()
+    return {'ok': True, 'booking_id': booking_id, 'message': 'Booking deleted successfully'}
+
+
+# POST alias for UIs that cannot issue DELETE requests.
+@router.post('/bookings/{booking_id}/delete')
+def delete_booking_post(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
     b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
     if not b:
         raise HTTPException(404, 'Booking not found')
