@@ -82,9 +82,10 @@ def serialize(b: Booking, public=False):
     }
 
 
-# Temporary fixed transaction ID so the employee workflow remains usable
-# while the production transaction service is being stabilized.
+# Temporary fixed transaction ID for the employee workflow.
+# It is intentionally server-side so the browser cannot choose an arbitrary ID.
 FIXED_TRANSACTION_ID = 'FS-TXN-FARMERSETU-0001'
+
 
 def make_transaction_id():
     return FIXED_TRANSACTION_ID
@@ -92,6 +93,41 @@ def make_transaction_id():
 
 def add_notification(db: Session, b: Booking, title: str, message: str, kind: str):
     db.add(Notification(user_id=b.farmer_id, title=title, message=message, kind=kind, booking_id=b.booking_id))
+
+
+def _generate_transaction_for_booking(b: Booking, db: Session):
+    """Idempotent transaction generation used by all legacy/current endpoints."""
+    if b.status == 'Cancelled':
+        raise HTTPException(400, 'Cancelled booking cannot generate a transaction')
+    if b.received_quantity is None:
+        raise HTTPException(400, 'Enter actual received quantity before generating transaction ID')
+    if b.quality_status != 'Passed':
+        b.quality_status = 'Passed'
+        if b.status == 'Confirmed':
+            b.status = 'Processing'
+    if not b.payment_reference:
+        b.payment_reference = make_transaction_id()
+        b.estimated_amount = float(b.received_quantity) * float(b.price or 0)
+        add_notification(
+            db, b, 'Quality check passed ✓',
+            f'{b.received_quantity:g} quintal received. Final amount: ₹{b.estimated_amount:,.0f}. Transaction ID: {b.payment_reference}.',
+            'quality'
+        )
+    db.commit()
+    db.refresh(b)
+    return serialize(b)
+
+
+def _delete_booking_by_key(booking_id: str, db: Session):
+    b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
+    if not b:
+        raise HTTPException(404, 'Booking not found')
+    if b.payment_status == 'Paid':
+        raise HTTPException(400, 'Paid booking cannot be deleted')
+    db.execute(delete(Notification).where(Notification.booking_id == b.booking_id))
+    db.delete(b)
+    db.commit()
+    return {'ok': True, 'booking_id': booking_id, 'message': 'Booking deleted successfully'}
 
 
 @router.get('/ping')
@@ -239,24 +275,18 @@ def update_booking(booking_id: str, data: BookingUpdate, _: User = Depends(curre
 
 @router.post('/bookings/{booking_id}/generate-transaction')
 def generate_transaction(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
+    return _generate_transaction_for_booking(
+        db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id))), db
+    ) if db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id))) else (_ for _ in ()).throw(HTTPException(404, 'Booking not found'))
+
+
+# Legacy alias used by older employee builds.
+@router.post('/bookings/{booking_id}/generate-transact')
+def generate_transact_legacy(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
     b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
     if not b:
         raise HTTPException(404, 'Booking not found')
-    if b.status == 'Cancelled':
-        raise HTTPException(400, 'Cancelled booking cannot generate a transaction')
-    if b.quality_status != 'Passed':
-        if b.received_quantity is None:
-            raise HTTPException(400, 'Enter actual received quantity before generating transaction ID')
-        b.quality_status = 'Passed'
-        if b.status == 'Confirmed':
-            b.status = 'Processing'
-    if not b.payment_reference:
-        b.payment_reference = make_transaction_id()
-        add_notification(db, b, 'Quality check passed ✓',
-                          f'{b.received_quantity:g} quintal received. Final amount: ₹{(float(b.received_quantity) * float(b.price)):,.0f}. Transaction ID: {b.payment_reference}.', 'quality')
-    db.commit()
-    db.refresh(b)
-    return serialize(b)
+    return _generate_transaction_for_booking(b, db)
 
 
 @router.post('/bookings/{booking_id}/mark-paid')
@@ -284,31 +314,26 @@ def mark_paid(booking_id: str, _: User = Depends(current_employee), db: Session 
     return serialize(b)
 
 
+# Legacy aliases used by older employee UI builds.
+@router.post('/bookings/{booking_id}/mark-payment')
+def mark_payment_legacy(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
+    return mark_paid(booking_id, _, db)
+
+
+@router.post('/bookings/{booking_id}/paid')
+def paid_legacy(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
+    return mark_paid(booking_id, _, db)
+
+
 @router.delete('/bookings/{booking_id}')
 def delete_booking(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
-    b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
-    if not b:
-        raise HTTPException(404, 'Booking not found')
-    if b.payment_status == 'Paid':
-        raise HTTPException(400, 'Paid booking cannot be deleted')
-    db.execute(delete(Notification).where(Notification.booking_id == b.booking_id))
-    db.delete(b)
-    db.commit()
-    return {'ok': True, 'booking_id': booking_id, 'message': 'Booking deleted successfully'}
+    return _delete_booking_by_key(booking_id, db)
 
 
-# POST alias for UIs that cannot issue DELETE requests.
+# POST alias for UIs/proxies that cannot issue DELETE requests.
 @router.post('/bookings/{booking_id}/delete')
 def delete_booking_post(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
-    b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
-    if not b:
-        raise HTTPException(404, 'Booking not found')
-    if b.payment_status == 'Paid':
-        raise HTTPException(400, 'Paid booking cannot be deleted')
-    db.execute(delete(Notification).where(Notification.booking_id == b.booking_id))
-    db.delete(b)
-    db.commit()
-    return {'ok': True, 'booking_id': booking_id, 'message': 'Booking deleted successfully'}
+    return _delete_booking_by_key(booking_id, db)
 
 
 @router.patch('/bookings/{booking_id}/cancel')
