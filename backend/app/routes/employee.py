@@ -90,6 +90,7 @@ def update_booking(booking_id:str,data:BookingUpdate,_:User=Depends(current_empl
     if v.get('status') and v['status'] not in ALLOWED_STATUS: raise HTTPException(400,'Invalid booking status')
     if v.get('quality_status') and v['quality_status'] not in ALLOWED_QUALITY: raise HTTPException(400,'Invalid quality status')
     if v.get('payment_status') and v['payment_status'] not in ALLOWED_PAYMENT: raise HTTPException(400,'Invalid payment status')
+    if v.get('received_quantity') is not None and v['received_quantity']<=0: raise HTTPException(400,'Received quantity must be greater than zero')
     if v.get('quality_status')=='Passed' and not (b.received_quantity or v.get('received_quantity')): raise HTTPException(400,'Enter received quantity before passing quality')
     if v.get('quality_status')=='Passed' and not b.payment_reference and not v.get('payment_reference'):
         v['payment_reference']=make_transaction_id()
@@ -97,9 +98,20 @@ def update_booking(booking_id:str,data:BookingUpdate,_:User=Depends(current_empl
         reference=(v.get('payment_reference') or b.payment_reference or '').strip()
         if not reference: raise HTTPException(400,'Payment reference is required')
         if b.payment_reference and reference!=b.payment_reference: raise HTTPException(400,'Transaction ID does not match the generated ID')
+        if b.quality_status!='Passed' and v.get('quality_status')!='Passed': raise HTTPException(400,'Quality must be passed before payment')
+        v['payment_reference']=reference
     for k,val in v.items(): setattr(b,k,val)
     if b.payment_status=='Paid': b.status='Completed'
     db.commit(); db.refresh(b); return serialize(b)
+
+@router.post('/bookings/{booking_id}/generate-transaction')
+def generate_transaction(booking_id:str,_:User=Depends(current_employee),db:Session=Depends(get_db)):
+    b=db.scalar(select(Booking).where((Booking.booking_id==booking_id)|(Booking.token==booking_id)))
+    if not b: raise HTTPException(404,'Booking not found')
+    if b.quality_status!='Passed': raise HTTPException(400,'Pass quality before generating transaction ID')
+    if not b.payment_reference:
+        b.payment_reference=make_transaction_id(); db.commit(); db.refresh(b)
+    return serialize(b)
 
 @router.patch('/bookings/{booking_id}/cancel')
 def farmer_cancel_booking(booking_id:str,user:User=Depends(current_user),db:Session=Depends(get_db)):
