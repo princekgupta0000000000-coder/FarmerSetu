@@ -176,7 +176,7 @@ def update_booking(booking_id: str, data: BookingUpdate, _: User = Depends(curre
     if target_quality == 'Passed' and b.status == 'Cancelled':
         raise HTTPException(400, 'Cancelled booking cannot pass quality')
 
-    # Server-side, one-time transaction generation. The ID never comes from the browser.
+    # Transaction IDs are generated only on the server and remain immutable after generation.
     if target_quality == 'Passed' and not b.payment_reference:
         v['payment_reference'] = make_transaction_id()
 
@@ -246,6 +246,19 @@ def generate_transaction(booking_id: str, _: User = Depends(current_employee), d
         db.commit()
         db.refresh(b)
     return serialize(b)
+
+
+@router.delete('/bookings/{booking_id}')
+def employee_delete_booking(booking_id: str, user: User = Depends(current_employee), db: Session = Depends(get_db)):
+    b = db.scalar(select(Booking).where(Booking.booking_id == booking_id))
+    if not b:
+        raise HTTPException(404, 'Booking not found')
+    if b.payment_status == 'Paid':
+        raise HTTPException(400, 'Paid bookings cannot be deleted. Reverse the payment first.')
+    db.execute(delete(Notification).where(Notification.booking_id == b.booking_id))
+    db.delete(b)
+    db.commit()
+    return {'ok': True, 'id': booking_id, 'message': 'Booking deleted successfully'}
 
 
 @router.patch('/bookings/{booking_id}/cancel')
