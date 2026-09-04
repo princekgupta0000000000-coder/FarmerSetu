@@ -83,6 +83,7 @@ def serialize(b: Booking, public=False):
 
 
 # Temporary fixed transaction ID for the employee workflow.
+# It is intentionally fixed until the live transaction service is connected.
 FIXED_TRANSACTION_ID = 'FS-TXN-FARMERSETU-0001'
 
 
@@ -99,19 +100,26 @@ def _generate_transaction_for_booking(b: Booking | None, db: Session):
         raise HTTPException(404, 'Booking not found')
     if b.status == 'Cancelled':
         raise HTTPException(400, 'Cancelled booking cannot generate a transaction')
-    if b.received_quantity is None:
-        raise HTTPException(400, 'Enter actual received quantity before generating transaction ID')
+
+    # Temporary/demo workflow: always make the fixed transaction ID available.
+    # If actual quantity has not been entered yet, use booked quantity for the
+    # temporary amount. Once received_quantity is entered, the amount is updated.
     old_quality = b.quality_status
     if b.quality_status != 'Passed':
         b.quality_status = 'Passed'
         if b.status == 'Confirmed':
             b.status = 'Processing'
+
     if not b.payment_reference:
         b.payment_reference = make_transaction_id()
-        b.estimated_amount = float(b.received_quantity) * float(b.price or 0)
+
+    actual_qty = b.received_quantity if b.received_quantity is not None else b.quantity
+    b.estimated_amount = float(actual_qty or 0) * float(b.price or 0)
+
+    if old_quality != 'Passed':
         add_notification(
             db, b, 'Quality check passed ✓',
-            f'{b.received_quantity:g} quintal received. Final amount: ₹{b.estimated_amount:,.0f}. Transaction ID: {b.payment_reference}.',
+            f'{actual_qty:g} quintal received/registered. Final amount: ₹{b.estimated_amount:,.0f}. Transaction ID: {b.payment_reference}.',
             'quality'
         )
     db.commit()
@@ -213,7 +221,10 @@ def update_booking(booking_id: str, data: BookingUpdate, _: User = Depends(curre
 
     target_quality = v.get('quality_status', b.quality_status)
     if target_quality == 'Passed' and received is None:
-        raise HTTPException(400, 'Enter actual received quantity before passing quality')
+        # Demo mode permits the fixed transaction to be generated first.
+        # Keep the quality action usable without forcing a second API call.
+        received = b.quantity
+        v['received_quantity'] = received
     if target_quality == 'Passed' and b.status == 'Cancelled':
         raise HTTPException(400, 'Cancelled booking cannot pass quality')
 
@@ -224,12 +235,13 @@ def update_booking(booking_id: str, data: BookingUpdate, _: User = Depends(curre
     if target_payment == 'Paid':
         if target_quality != 'Passed':
             raise HTTPException(400, 'Quality must be passed before payment')
-        reference = (v.get('payment_reference') or b.payment_reference or '').strip()
-        if not reference:
-            reference = make_transaction_id()
+        reference = (v.get('payment_reference') or b.payment_reference or '').strip() or make_transaction_id()
         if b.payment_reference and reference != b.payment_reference:
             raise HTTPException(400, 'Transaction ID does not match the generated ID')
         v['payment_reference'] = reference
+        if received is None:
+            received = b.quantity
+            v['received_quantity'] = received
 
     for key, value in v.items():
         setattr(b, key, value)
@@ -280,7 +292,6 @@ def generate_transaction(booking_id: str, _: User = Depends(current_employee), d
     return _generate_transaction_for_booking(b, db)
 
 
-# Legacy alias used by older employee builds.
 @router.post('/bookings/{booking_id}/generate-transact')
 def generate_transact_legacy(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
     b = db.scalar(select(Booking).where((Booking.booking_id == booking_id) | (Booking.token == booking_id)))
@@ -294,12 +305,16 @@ def mark_paid(booking_id: str, _: User = Depends(current_employee), db: Session 
         raise HTTPException(404, 'Booking not found')
     if b.status == 'Cancelled':
         raise HTTPException(400, 'Cancelled booking cannot be paid')
+
+    # Demo mode: payment can be completed with the fixed transaction ID even
+    # if the employee has not entered an actual received quantity yet.
     if b.received_quantity is None:
-        raise HTTPException(400, 'Enter actual received quantity before payment')
+        b.received_quantity = b.quantity
     if b.quality_status != 'Passed':
         b.quality_status = 'Passed'
     if not b.payment_reference:
         b.payment_reference = make_transaction_id()
+
     old_payment = b.payment_status
     b.payment_status = 'Paid'
     b.status = 'Completed'
@@ -312,7 +327,6 @@ def mark_paid(booking_id: str, _: User = Depends(current_employee), db: Session 
     return serialize(b)
 
 
-# Legacy aliases used by older employee UI builds.
 @router.post('/bookings/{booking_id}/mark-payment')
 def mark_payment_legacy(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
     return mark_paid(booking_id, _, db)
@@ -328,7 +342,6 @@ def delete_booking(booking_id: str, _: User = Depends(current_employee), db: Ses
     return _delete_booking_by_key(booking_id, db)
 
 
-# POST alias for UIs/proxies that cannot issue DELETE requests.
 @router.post('/bookings/{booking_id}/delete')
 def delete_booking_post(booking_id: str, _: User = Depends(current_employee), db: Session = Depends(get_db)):
     return _delete_booking_by_key(booking_id, db)
