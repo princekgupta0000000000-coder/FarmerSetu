@@ -2,7 +2,7 @@ from datetime import datetime
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.models.booking import Booking
@@ -18,14 +18,16 @@ def current_user(authorization: str = Header(default=''), db: Session = Depends(
     payload = decode_access_token(token) if token else None
     if not payload:
         raise HTTPException(401, 'Login required')
-    user = db.get(User, int(payload['sub']))
+    try:
+        user = db.get(User, int(payload['sub']))
+    except Exception:
+        user = None
     if not user or not user.is_active:
         raise HTTPException(401, 'Account is inactive')
     return user
 
 
-def current_employee(authorization: str = Header(default=''), db: Session = Depends(get_db)) -> User:
-    user = current_user(authorization, db)
+def current_employee(user: User = Depends(current_user)) -> User:
     if user.role not in {'employee', 'procurement_employee', 'officer', 'admin'}:
         raise HTTPException(403, 'Employee access required')
     return user
@@ -70,10 +72,8 @@ def serialize(b: Booking, public=False):
         'id': b.booking_id, 'token': b.token, 'farmer_id': b.farmer_id,
         'farmer': b.farmer_name, 'mobile': mobile, 'centre': b.centre,
         'state': b.state, 'district': b.district, 'crop': b.crop,
-        'quantity': b.quantity, 'price': b.price,
-        'estimatedTotal': actual_amount,
-        'bookedAmount': b.estimated_amount,
-        'receivedAmount': actual_amount,
+        'quantity': b.quantity, 'price': b.price, 'estimatedTotal': actual_amount,
+        'bookedAmount': b.estimated_amount, 'receivedAmount': actual_amount,
         'date': b.booking_date, 'slot': b.slot, 'status': b.status,
         'qualityStatus': b.quality_status, 'qualityNote': b.quality_note,
         'paymentStatus': b.payment_status,
@@ -83,7 +83,7 @@ def serialize(b: Booking, public=False):
 
 
 def make_transaction_id():
-    return f"FS-{datetime.utcnow():%Y%m%d}-{secrets.token_hex(4).upper()}"
+    return f"FS-TXN-{datetime.utcnow():%Y%m%d}-{secrets.token_hex(4).upper()}"
 
 
 def add_notification(db: Session, b: Booking, title: str, message: str, kind: str):
@@ -132,8 +132,6 @@ def list_bookings(centre: str | None = None, date: str | None = None, search: st
     return [serialize(x) for x in db.scalars(q).all()]
 
 
-# IMPORTANT: keep /bookings/mine before /bookings/{booking_id} so FastAPI does not
-# interpret "mine" as a booking ID.
 @router.get('/bookings/mine')
 def my_bookings(user: User = Depends(current_user), db: Session = Depends(get_db)):
     if user.role != 'farmer':
@@ -151,58 +149,85 @@ def get_booking(booking_id: str, _: User = Depends(current_employee), db: Sessio
 
 
 @router.patch('/bookings/{booking_id}')
-def update_booking(booking_id: str, data: BookingUpdate, user: User = Depends(current_employee), db: Session = Depends(get_db)):
+def update_booking(booking_id: str, data: BookingUpdate, _: User = Depends(current_employee), db: Session = Depends(get_db)):
     b = db.scalar(select(Booking).where(Booking.booking_id == booking_id))
     if not b:
         raise HTTPException(404, 'Booking not found')
-    old_status, old_quality, old_payment = b.status, b.quality_status, b.payment_status
     v = data.model_dump(exclude_none=True)
+    old_status, old_quality, old_payment = b.status, b.quality_status, b.payment_status
+
     if v.get('status') and v['status'] not in ALLOWED_STATUS:
         raise HTTPException(400, 'Invalid booking status')
     if v.get('quality_status') and v['quality_status'] not in ALLOWED_QUALITY:
         raise HTTPException(400, 'Invalid quality status')
     if v.get('payment_status') and v['payment_status'] not in ALLOWED_PAYMENT:
         raise HTTPException(400, 'Invalid payment status')
-    if v.get('received_quantity') is not None and v['received_quantity'] <= 0:
-        raise HTTPException(400, 'Received quantity must be greater than zero')
-    if v.get('quality_status') == 'Passed' and not (b.received_quantity or v.get('received_quantity')):
-        raise HTTPException(400, 'Enter received quantity before passing quality')
 
-    if v.get('quality_status') == 'Passed' and not b.payment_reference and not v.get('payment_reference'):
+    received = v.get('received_quantity', b.received_quantity)
+    if received is not None:
+        if received <= 0:
+            raise HTTPException(400, 'Received quantity must be greater than zero')
+        if received > b.quantity:
+            raise HTTPException(400, f'Received quantity cannot exceed booked quantity ({b.quantity:g} quintal)')
+
+    target_quality = v.get('quality_status', b.quality_status)
+    if target_quality == 'Passed' and received is None:
+        raise HTTPException(400, 'Enter actual received quantity before passing quality')
+    if target_quality == 'Passed' and b.status == 'Cancelled':
+        raise HTTPException(400, 'Cancelled booking cannot pass quality')
+
+    # Server-side, one-time transaction generation. The ID never comes from the browser.
+    if target_quality == 'Passed' and not b.payment_reference:
         v['payment_reference'] = make_transaction_id()
-    if v.get('payment_status') == 'Paid':
-        reference = (v.get('payment_reference') or b.payment_reference or '').strip()
+
+    target_payment = v.get('payment_status', b.payment_status)
+    reference = (v.get('payment_reference') or b.payment_reference or '').strip()
+    if target_payment == 'Paid':
+        if target_quality != 'Passed':
+            raise HTTPException(400, 'Quality must be passed before payment')
         if not reference:
-            raise HTTPException(400, 'Transaction reference is required')
+            raise HTTPException(400, 'Transaction ID is missing')
         if b.payment_reference and reference != b.payment_reference:
             raise HTTPException(400, 'Transaction ID does not match the generated ID')
-        if b.quality_status != 'Passed' and v.get('quality_status') != 'Passed':
-            raise HTTPException(400, 'Quality must be passed before payment')
         v['payment_reference'] = reference
 
-    for k, val in v.items():
-        setattr(b, k, val)
+    for key, value in v.items():
+        setattr(b, key, value)
+
+    if b.quality_status == 'Passed' and b.status == 'Confirmed':
+        b.status = 'Processing'
     if b.payment_status == 'Paid':
         b.status = 'Completed'
 
-    # The final payable amount is always received quantity × agreed rate.
     actual_qty = b.received_quantity if b.received_quantity is not None else b.quantity
     b.estimated_amount = float(actual_qty or 0) * float(b.price or 0)
 
     if old_status != b.status:
-        titles = {'Checked In': 'Booking checked in', 'Processing': 'Procurement started', 'Completed': 'Procurement completed'}
-        if b.status in titles:
-            add_notification(db, b, titles[b.status], f'Booking {b.token} is now {b.status}.', 'status')
+        messages = {
+            'Checked In': ('Farmer checked in ✓', f'Booking {b.token} has been checked in.'),
+            'Processing': ('Procurement processing started', f'Booking {b.token} is now being processed.'),
+            'Completed': ('Procurement completed ✓', f'Booking {b.token} is complete. Final amount: ₹{b.estimated_amount:,.0f}.'),
+        }
+        if b.status in messages:
+            title, message = messages[b.status]
+            add_notification(db, b, title, message, 'status')
+
     if old_quality != b.quality_status:
         if b.quality_status == 'Passed':
             add_notification(db, b, 'Quality check passed ✓',
-                             f'{b.received_quantity:g} quintal received. Final amount: ₹{b.estimated_amount:,.0f}.', 'quality')
+                             f'{b.received_quantity:g} quintal received. Final amount: ₹{b.estimated_amount:,.0f}. Transaction ID: {b.payment_reference}.', 'quality')
         elif b.quality_status == 'Rejected':
             add_notification(db, b, 'Quality check rejected',
                              b.quality_note or f'Booking {b.token} did not pass quality check.', 'quality')
-    if old_payment != b.payment_status and b.payment_status == 'Paid':
-        add_notification(db, b, 'Payment received ✓',
-                         f'₹{b.estimated_amount:,.0f} has been marked paid. Transaction ID: {b.payment_reference}.', 'payment')
+
+    if old_payment != b.payment_status:
+        if b.payment_status == 'Processing':
+            add_notification(db, b, 'Payment is processing', f'Payment for booking {b.token} is being processed.', 'payment')
+        elif b.payment_status == 'Paid':
+            add_notification(db, b, 'Payment received ✓',
+                             f'₹{b.estimated_amount:,.0f} has been paid. Transaction ID: {b.payment_reference}.', 'payment')
+        elif b.payment_status == 'Failed':
+            add_notification(db, b, 'Payment failed', f'Payment for booking {b.token} could not be completed.', 'payment')
 
     db.commit()
     db.refresh(b)
@@ -230,12 +255,22 @@ def farmer_cancel_booking(booking_id: str, user: User = Depends(current_user), d
         raise HTTPException(404, 'Booking not found')
     if user.role != 'farmer' or b.farmer_id != user.id:
         raise HTTPException(403, 'You can cancel only your own booking')
-    if b.status not in {'Confirmed'}:
+    if b.status != 'Confirmed':
         raise HTTPException(400, 'This booking can no longer be cancelled')
     b.status = 'Cancelled'
     db.commit()
     db.refresh(b)
     return serialize(b)
+
+
+@router.post('/reset-demo-data')
+def reset_demo_data(user: User = Depends(current_employee), db: Session = Depends(get_db)):
+    if user.role != 'admin' and user.mobile != '9999999999':
+        raise HTTPException(403, 'Demo reset is not available for this employee')
+    db.execute(delete(Notification))
+    db.execute(delete(Booking))
+    db.commit()
+    return {'ok': True, 'message': 'Demo procurement data cleared. Farmer accounts were kept.'}
 
 
 @router.get('/summary')
@@ -246,7 +281,7 @@ def summary(_: User = Depends(current_employee), db: Session = Depends(get_db)):
         'total': len(rows), 'today': sum(b.booking_date == date.today().isoformat() for b in rows),
         'checkedIn': sum(b.status == 'Checked In' for b in rows),
         'pendingQuality': sum(b.quality_status == 'Pending' for b in rows),
-        'pendingPayment': sum(b.payment_status == 'Pending' for b in rows),
+        'pendingPayment': sum(b.payment_status in {'Pending', 'Processing'} for b in rows),
         'paid': sum(b.payment_status == 'Paid' for b in rows),
         'completed': sum(b.status == 'Completed' for b in rows),
     }
