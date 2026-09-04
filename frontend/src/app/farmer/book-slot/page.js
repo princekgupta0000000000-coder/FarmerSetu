@@ -1,5 +1,5 @@
 'use client';
-import{useEffect,useMemo,useState}from'react';import Link from'react/link';
+import{useEffect,useMemo,useState}from'react';import Link from'next/link';
 const API='/api/backend';
 const grains=[['Rice',2000],['Wheat',2425],['Maize',1960],['Bajra',2310],['Jowar',3180],['Ragi',4290],['Barley',2050],['Gram',5850],['Arhar Dal',7150],['Moong',7920],['Urad',7480],['Mustard',6120],['Soybean',4680],['Groundnut',6350],['Sesame',7420]];
 const today=()=>new Date().toISOString().slice(0,10);const token=()=>`TK-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;const km=(a,b,c,d)=>Math.sqrt(((a-c)*111)**2+((b-d)*111*Math.cos(a*Math.PI/180))**2);
