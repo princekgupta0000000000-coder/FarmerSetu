@@ -13,8 +13,7 @@ from app.utils.security import decode_access_token
 router = APIRouter(prefix='/api/employee', tags=['Procurement Employee'])
 
 def current_user(authorization: str = Header(default=''), db: Session = Depends(get_db)) -> User:
-    token = authorization.replace('Bearer ', '', 1).strip()
-    payload = decode_access_token(token) if token else None
+    token = authorization.replace('Bearer ', '', 1).strip(); payload = decode_access_token(token) if token else None
     if not payload: raise HTTPException(401, 'Login required')
     try: user = db.get(User, int(payload['sub']))
     except Exception: user = None
@@ -32,26 +31,20 @@ class BookingUpdate(BaseModel):
 ALLOWED_STATUS={'Confirmed','Checked In','Processing','Completed','Cancelled'}; ALLOWED_QUALITY={'Pending','Passed','Rejected'}; ALLOWED_PAYMENT={'Pending','Processing','Paid','Failed'}
 
 def serialize(b: Booking, public=False):
-    mobile=b.farmer_mobile if not public else ('******'+b.farmer_mobile[-4:] if len(b.farmer_mobile)>=4 else '****')
-    actual_qty=b.received_quantity if b.received_quantity is not None else b.quantity
-    actual_amount=float(actual_qty or 0)*float(b.price or 0)
+    mobile=b.farmer_mobile if not public else ('******'+b.farmer_mobile[-4:] if len(b.farmer_mobile)>=4 else '****'); actual_qty=b.received_quantity if b.received_quantity is not None else b.quantity; actual_amount=float(actual_qty or 0)*float(b.price or 0)
     return {'id':b.booking_id,'token':b.token,'farmer_id':b.farmer_id,'farmer':b.farmer_name,'mobile':mobile,'centre':b.centre,'state':b.state,'district':b.district,'crop':b.crop,'quantity':b.quantity,'price':b.price,'estimatedTotal':actual_amount,'bookedAmount':b.estimated_amount,'receivedAmount':actual_amount,'date':b.booking_date,'slot':b.slot,'status':b.status,'qualityStatus':b.quality_status,'qualityNote':b.quality_note,'paymentStatus':b.payment_status,'paymentReference':b.payment_reference if not public else '','receivedQuantity':b.received_quantity,'createdAt':b.created_at.isoformat() if b.created_at else None}
 
 FIXED_TRANSACTION_ID='FS-TXN-FARMERSETU-0001'
 def make_transaction_id(): return FIXED_TRANSACTION_ID
-
 def add_notification(db: Session,b: Booking,title: str,message: str,kind: str): db.add(Notification(user_id=b.farmer_id,title=title,message=message,kind=kind,booking_id=b.booking_id))
 
 def _generate_transaction_for_booking(b: Booking|None,db: Session):
     if not b: raise HTTPException(404,'Booking not found')
     if b.status=='Cancelled': raise HTTPException(400,'Cancelled booking cannot generate a transaction')
     old_quality=b.quality_status
-    if b.quality_status!='Passed':
-        b.quality_status='Passed'
-        if b.status=='Confirmed': b.status='Processing'
+    if b.quality_status!='Passed': b.quality_status='Passed'; b.status='Processing' if b.status=='Confirmed' else b.status
     if not b.payment_reference: b.payment_reference=make_transaction_id()
-    actual_qty=b.received_quantity if b.received_quantity is not None else b.quantity
-    b.estimated_amount=float(actual_qty or 0)*float(b.price or 0)
+    actual_qty=b.received_quantity if b.received_quantity is not None else b.quantity; b.estimated_amount=float(actual_qty or 0)*float(b.price or 0)
     if old_quality!='Passed': add_notification(db,b,'Quality check passed ✓',f'{actual_qty:g} quintal received/registered. Final amount: ₹{b.estimated_amount:,.0f}. Transaction ID: {b.payment_reference}.','quality')
     db.commit();db.refresh(b);return serialize(b)
 
@@ -59,25 +52,21 @@ def _delete_booking_by_key(booking_id: str,db: Session):
     b=db.scalar(select(Booking).where((Booking.booking_id==booking_id)|(Booking.token==booking_id)))
     if not b: raise HTTPException(404,'Booking not found')
     if b.payment_status=='Paid': raise HTTPException(400,'Paid booking cannot be deleted')
-    db.execute(delete(Notification).where(Notification.booking_id==b.booking_id));db.delete(b);db.commit()
-    return {'ok':True,'booking_id':booking_id,'message':'Booking deleted successfully'}
+    db.execute(delete(Notification).where(Notification.booking_id==b.booking_id));db.delete(b);db.commit();return {'ok':True,'booking_id':booking_id,'message':'Booking deleted successfully'}
 
 @router.get('/ping')
 def ping(): return {'ok':True}
-
 @router.post('/bookings',status_code=201)
 def create_booking(data: BookingCreate,user: User=Depends(current_user),db: Session=Depends(get_db)):
     if user.role!='farmer' or user.id!=data.farmer_id: raise HTTPException(403,'Only the logged-in farmer can create this booking')
-    existing=db.scalar(select(Booking).where(Booking.booking_id==data.booking_id))
+    existing=db.scalar(select(Booking).where(Booking.booking_id==data.booking_id));
     if existing:return serialize(existing)
     b=Booking(**data.model_dump());db.add(b);db.commit();db.refresh(b);return serialize(b)
-
 @router.get('/public/bookings/{booking_key}')
 def public_booking(booking_key: str,db: Session=Depends(get_db)):
     b=db.scalar(select(Booking).where((Booking.token==booking_key)|(Booking.booking_id==booking_key)))
     if not b: raise HTTPException(404,'Booking not found')
     return serialize(b,public=True)
-
 @router.get('/bookings')
 def list_bookings(centre: str|None=None,date: str|None=None,search: str|None=None,_: User=Depends(current_employee),db: Session=Depends(get_db)):
     q=select(Booking).order_by(Booking.booking_date.asc(),Booking.slot.asc(),Booking.created_at.asc())
@@ -86,19 +75,15 @@ def list_bookings(centre: str|None=None,date: str|None=None,search: str|None=Non
     if search:
         s=f'%{search.strip()}%';q=q.where((Booking.booking_id.ilike(s))|(Booking.token.ilike(s))|(Booking.farmer_name.ilike(s))|(Booking.farmer_mobile.ilike(s)))
     return [serialize(x) for x in db.scalars(q).all()]
-
 @router.get('/bookings/mine')
 def my_bookings(user: User=Depends(current_user),db: Session=Depends(get_db)):
     if user.role!='farmer': raise HTTPException(403,'Farmer access required')
-    q=select(Booking).where(Booking.farmer_id==user.id).order_by(Booking.booking_date.desc(),Booking.created_at.desc())
-    return [serialize(x) for x in db.scalars(q).all()]
-
+    q=select(Booking).where(Booking.farmer_id==user.id).order_by(Booking.booking_date.desc(),Booking.created_at.desc());return [serialize(x) for x in db.scalars(q).all()]
 @router.get('/bookings/{booking_id}')
 def get_booking(booking_id: str,_: User=Depends(current_employee),db: Session=Depends(get_db)):
     b=db.scalar(select(Booking).where((Booking.booking_id==booking_id)|(Booking.token==booking_id)))
     if not b: raise HTTPException(404,'Booking not found')
     return serialize(b)
-
 @router.patch('/bookings/{booking_id}')
 def update_booking(booking_id: str,data: BookingUpdate,_: User=Depends(current_employee),db: Session=Depends(get_db)):
     b=db.scalar(select(Booking).where(Booking.booking_id==booking_id))
@@ -128,8 +113,7 @@ def update_booking(booking_id: str,data: BookingUpdate,_: User=Depends(current_e
     actual_qty=b.received_quantity if b.received_quantity is not None else b.quantity;b.estimated_amount=float(actual_qty or 0)*float(b.price or 0)
     if old_status!=b.status:
         messages={'Checked In':('Farmer checked in ✓',f'Booking {b.token} has been checked in.'),'Processing':('Procurement processing started',f'Booking {b.token} is now being processed.'),'Completed':('Procurement completed ✓',f'Booking {b.token} is complete. Final amount: ₹{b.estimated_amount:,.0f}.')}
-        if b.status in messages:
-            title,message=messages[b.status];add_notification(db,b,title,message,'status')
+        if b.status in messages:title,message=messages[b.status];add_notification(db,b,title,message,'status')
     if old_quality!=b.quality_status:
         if b.quality_status=='Passed':add_notification(db,b,'Quality check passed ✓',f'{b.received_quantity:g} quintal received. Final amount: ₹{b.estimated_amount:,.0f}. Transaction ID: {b.payment_reference}.','quality')
         elif b.quality_status=='Rejected':add_notification(db,b,'Quality check rejected',b.quality_note or f'Booking {b.token} did not pass quality check.','quality')
@@ -138,15 +122,12 @@ def update_booking(booking_id: str,data: BookingUpdate,_: User=Depends(current_e
         elif b.payment_status=='Paid':add_notification(db,b,'Payment received ✓',f'₹{b.estimated_amount:,.0f} has been paid. Transaction ID: {b.payment_reference}.','payment')
         elif b.payment_status=='Failed':add_notification(db,b,'Payment failed',f'Payment for booking {b.token} could not be completed.','payment')
     db.commit();db.refresh(b);return serialize(b)
-
 @router.post('/bookings/{booking_id}/generate-transaction')
 def generate_transaction(booking_id: str,_: User=Depends(current_employee),db: Session=Depends(get_db)):
     b=db.scalar(select(Booking).where((Booking.booking_id==booking_id)|(Booking.token==booking_id)));return _generate_transaction_for_booking(b,db)
-
 @router.post('/bookings/{booking_id}/generate-transact')
 def generate_transact_legacy(booking_id: str,_: User=Depends(current_employee),db: Session=Depends(get_db)):
     b=db.scalar(select(Booking).where((Booking.booking_id==booking_id)|(Booking.token==booking_id)));return _generate_transaction_for_booking(b,db)
-
 @router.post('/bookings/{booking_id}/mark-paid')
 def mark_paid(booking_id: str,_: User=Depends(current_employee),db: Session=Depends(get_db)):
     b=db.scalar(select(Booking).where((Booking.booking_id==booking_id)|(Booking.token==booking_id)))
@@ -158,7 +139,6 @@ def mark_paid(booking_id: str,_: User=Depends(current_employee),db: Session=Depe
     old_payment=b.payment_status;b.payment_status='Paid';b.status='Completed';b.estimated_amount=float(b.received_quantity)*float(b.price or 0)
     if old_payment!='Paid':add_notification(db,b,'Payment received ✓',f'₹{b.estimated_amount:,.0f} has been paid. Transaction ID: {b.payment_reference}.','payment')
     db.commit();db.refresh(b);return serialize(b)
-
 @router.post('/bookings/{booking_id}/mark-payment')
 def mark_payment_legacy(booking_id: str,_: User=Depends(current_employee),db: Session=Depends(get_db)): return mark_paid(booking_id,_,db)
 @router.post('/bookings/{booking_id}/paid')
@@ -174,3 +154,11 @@ def farmer_cancel_booking(booking_id: str,user: User=Depends(current_user),db: S
     if user.role!='farmer' or b.farmer_id!=user.id: raise HTTPException(403,'You can only cancel your own booking')
     if b.payment_status=='Paid': raise HTTPException(400,'Paid booking cannot be cancelled')
     b.status='Cancelled';db.commit();db.refresh(b);return serialize(b)
+@router.post('/reset-demo-data')
+def reset_demo_data(user: User=Depends(current_employee),db: Session=Depends(get_db)):
+    if user.role!='admin' and user.mobile!='9999999999': raise HTTPException(403,'Demo reset is not available for this employee')
+    db.execute(delete(Notification));db.execute(delete(Booking));db.commit();return {'ok':True,'message':'Demo procurement data cleared. Farmer accounts were kept.'}
+@router.get('/summary')
+def summary(_: User=Depends(current_employee),db: Session=Depends(get_db)):
+    from datetime import date
+    rows=db.scalars(select(Booking)).all();return {'total':len(rows),'today':sum(b.booking_date==date.today().isoformat() for b in rows),'checkedIn':sum(b.status=='Checked In' for b in rows),'pendingQuality':sum(b.quality_status=='Pending' for b in rows),'pendingPayment':sum(b.payment_status in {'Pending','Processing'} for b in rows),'paid':sum(b.payment_status=='Paid' for b in rows),'completed':sum(b.status=='Completed' for b in rows)}
