@@ -1,4 +1,7 @@
-import os, json, urllib.request, urllib.error
+import json
+import os
+import urllib.request
+import urllib.error
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
@@ -14,56 +17,36 @@ from app.models.user import User
 from app.models.booking import Booking  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.utils.security import hash_password
+from app.services.firestore_service import get_firestore_client
 from sqlalchemy import select
 
 app = FastAPI(title='FarmerSetu API', version='1.1.1')
 
-# Force a real HTTP Bearer/JWT security definition into the generated OpenAPI
-# document. This makes Swagger UI show its global Authorize button.
+
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-
-    schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        description='FarmerSetu backend API with JWT Bearer authentication.',
-        routes=app.routes,
-    )
-
+    schema = get_openapi(title=app.title, version=app.version,
+                         description='FarmerSetu backend API with JWT Bearer authentication.',
+                         routes=app.routes)
     components = schema.setdefault('components', {})
     schemes = components.setdefault('securitySchemes', {})
-    schemes['BearerAuth'] = {
-        'type': 'http',
-        'scheme': 'bearer',
-        'bearerFormat': 'JWT',
-        'description': 'JWT access token returned by POST /api/auth/login',
-    }
-
-    # Apply the Bearer requirement to every API operation except explicitly
-    # public endpoints. Do not use '/' as a prefix because that would match
-    # every FastAPI path and accidentally skip all operations.
-    public_paths = {
-        '/',
-        '/health',
-        '/api/notifications/whatsapp',
-    }
+    schemes['BearerAuth'] = {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT'}
+    public_paths = {'/', '/health', '/api/notifications/whatsapp'}
     public_prefixes = ('/api/auth/', '/api/otp/')
-
     for path, path_item in schema.get('paths', {}).items():
         if path in public_paths or path.startswith(public_prefixes):
             continue
         for operation in path_item.values():
             if isinstance(operation, dict) and 'responses' in operation:
                 operation['security'] = [{'BearerAuth': []}]
-
-    # Keep the security scheme visible even in Swagger versions that rely on
-    # the document-level security declaration to render the Authorize button.
     schema['security'] = [{'BearerAuth': []}]
     app.openapi_schema = schema
     return schema
 
+
 app.openapi = custom_openapi
+
 
 @app.on_event('startup')
 def seed_demo_employee():
@@ -73,10 +56,13 @@ def seed_demo_employee():
         mobile = '9999999999'
         user = db.scalar(select(User).where(User.mobile == mobile))
         if user is None:
-            db.add(User(full_name='FarmerSetu Procurement Employee', mobile=mobile, email='employee@farmersetu.demo', password_hash=hash_password('Employee@123'), state='Uttar Pradesh', district='Lucknow', role='employee', is_active=True))
+            db.add(User(full_name='FarmerSetu Procurement Employee', mobile=mobile,
+                        email='employee@farmersetu.demo', password_hash=hash_password('Employee@123'),
+                        state='Uttar Pradesh', district='Lucknow', role='employee', is_active=True))
             db.commit()
     finally:
         db.close()
+
 
 @app.middleware('http')
 async def cors_middleware(request: Request, call_next):
@@ -94,6 +80,26 @@ async def cors_middleware(request: Request, call_next):
     response.headers['Access-Control-Max-Age'] = '86400'
     return response
 
+
+@app.get('/')
+def root():
+    return {'message': 'FarmerSetu API is running', 'version': '1.1.1'}
+
+
+@app.get('/health')
+def health():
+    return {'status': 'ok'}
+
+
+@app.get('/health/firebase')
+def firebase_health():
+    try:
+        get_firestore_client().collection('_system').document('health').set({'status': 'ok'}, merge=True)
+        return {'status': 'ok', 'firebase': 'connected'}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f'Firebase connection failed: {str(exc)[:300]}')
+
+
 app.include_router(auth_router)
 app.include_router(notifications_router)
 app.include_router(employee_router)
@@ -102,14 +108,11 @@ app.include_router(queue_router)
 app.include_router(procurement_router)
 app.include_router(payments_router)
 
+
 class WhatsAppNotification(BaseModel):
     phone: str
     message: str
 
-@app.get('/')
-def root(): return {'message': 'FarmerSetu API is running', 'version': '1.1.1'}
-@app.get('/health')
-def health(): return {'status': 'ok'}
 
 @app.post('/api/notifications/whatsapp')
 def whatsapp_notification(payload: WhatsAppNotification):
@@ -118,12 +121,16 @@ def whatsapp_notification(payload: WhatsAppNotification):
     if not token or not phone_id:
         return {'sent': False, 'configured': False, 'message': 'WhatsApp notifications are not configured yet.'}
     phone = ''.join(ch for ch in payload.phone if ch.isdigit())
-    if len(phone) == 10: phone = '91' + phone
-    data = json.dumps({'messaging_product':'whatsapp','to':phone,'type':'text','text':{'preview_url':False,'body':payload.message}}).encode()
-    req = urllib.request.Request(f'https://graph.facebook.com/v23.0/{phone_id}/messages', data=data, headers={'Authorization':f'Bearer {token}','Content-Type':'application/json'}, method='POST')
+    if len(phone) == 10:
+        phone = '91' + phone
+    data = json.dumps({'messaging_product': 'whatsapp', 'to': phone, 'type': 'text',
+                       'text': {'preview_url': False, 'body': payload.message}}).encode()
+    req = urllib.request.Request(f'https://graph.facebook.com/v23.0/{phone_id}/messages', data=data,
+                                 headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}, method='POST')
     try:
-        with urllib.request.urlopen(req, timeout=12) as response: result=json.loads(response.read().decode())
-        return {'sent':True,'configured':True,'result':result}
+        with urllib.request.urlopen(req, timeout=12) as response:
+            result = json.loads(response.read().decode())
+        return {'sent': True, 'configured': True, 'result': result}
     except urllib.error.HTTPError as exc:
         raise HTTPException(502, f'WhatsApp delivery failed: {exc.read().decode(errors="replace")[:500]}')
     except Exception as exc:
