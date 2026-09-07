@@ -1,5 +1,6 @@
 import os, json, urllib.request, urllib.error
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 from app.routes.auth import router as auth_router
 from app.routes.notifications import router as notifications_router
@@ -16,6 +17,33 @@ from app.utils.security import hash_password
 from sqlalchemy import select
 
 app = FastAPI(title='FarmerSetu API', version='1.1.0')
+
+# Explicit JWT Bearer OpenAPI scheme so Swagger always exposes Authorize.
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version,
+                         description='FarmerSetu backend API with JWT Bearer authentication.',
+                         routes=app.routes)
+    components = schema.setdefault('components', {})
+    schemes = components.setdefault('securitySchemes', {})
+    schemes['BearerAuth'] = {
+        'type': 'http',
+        'scheme': 'bearer',
+        'bearerFormat': 'JWT',
+        'description': 'Paste the access_token returned by POST /api/auth/login.'
+    }
+    public_prefixes = ('/api/auth/', '/api/otp/', '/', '/health', '/api/notifications/whatsapp')
+    for path, methods in schema.get('paths', {}).items():
+        if path.startswith(public_prefixes):
+            continue
+        for operation in methods.values():
+            if isinstance(operation, dict) and 'responses' in operation:
+                operation.setdefault('security', [{'BearerAuth': []}])
+    app.openapi_schema = schema
+    return schema
+
+app.openapi = custom_openapi
 
 @app.on_event('startup')
 def seed_demo_employee():
