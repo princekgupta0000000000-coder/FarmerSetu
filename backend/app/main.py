@@ -16,30 +16,50 @@ from app.models.notification import Notification  # noqa: F401
 from app.utils.security import hash_password
 from sqlalchemy import select
 
-app = FastAPI(title='FarmerSetu API', version='1.1.0')
+app = FastAPI(title='FarmerSetu API', version='1.1.1')
 
-# Explicit JWT Bearer OpenAPI scheme so Swagger always exposes Authorize.
+# Force a real HTTP Bearer/JWT security definition into the generated OpenAPI
+# document. This makes Swagger UI show its global Authorize button.
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
-    schema = get_openapi(title=app.title, version=app.version,
-                         description='FarmerSetu backend API with JWT Bearer authentication.',
-                         routes=app.routes)
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description='FarmerSetu backend API with JWT Bearer authentication.',
+        routes=app.routes,
+    )
+
     components = schema.setdefault('components', {})
     schemes = components.setdefault('securitySchemes', {})
     schemes['BearerAuth'] = {
         'type': 'http',
         'scheme': 'bearer',
         'bearerFormat': 'JWT',
-        'description': 'Paste the access_token returned by POST /api/auth/login.'
+        'description': 'JWT access token returned by POST /api/auth/login',
     }
-    public_prefixes = ('/api/auth/', '/api/otp/', '/', '/health', '/api/notifications/whatsapp')
-    for path, methods in schema.get('paths', {}).items():
-        if path.startswith(public_prefixes):
+
+    # Apply the Bearer requirement to every API operation except explicitly
+    # public endpoints. Do not use '/' as a prefix because that would match
+    # every FastAPI path and accidentally skip all operations.
+    public_paths = {
+        '/',
+        '/health',
+        '/api/notifications/whatsapp',
+    }
+    public_prefixes = ('/api/auth/', '/api/otp/')
+
+    for path, path_item in schema.get('paths', {}).items():
+        if path in public_paths or path.startswith(public_prefixes):
             continue
-        for operation in methods.values():
+        for operation in path_item.values():
             if isinstance(operation, dict) and 'responses' in operation:
-                operation.setdefault('security', [{'BearerAuth': []}])
+                operation['security'] = [{'BearerAuth': []}]
+
+    # Keep the security scheme visible even in Swagger versions that rely on
+    # the document-level security declaration to render the Authorize button.
+    schema['security'] = [{'BearerAuth': []}]
     app.openapi_schema = schema
     return schema
 
@@ -87,7 +107,7 @@ class WhatsAppNotification(BaseModel):
     message: str
 
 @app.get('/')
-def root(): return {'message': 'FarmerSetu API is running', 'version': '1.1.0'}
+def root(): return {'message': 'FarmerSetu API is running', 'version': '1.1.1'}
 @app.get('/health')
 def health(): return {'status': 'ok'}
 
